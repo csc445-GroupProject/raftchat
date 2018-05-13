@@ -116,7 +116,7 @@ public class App extends Application {
 
             VBox root = new VBox(10, chatArea, inputBox);
             root.setPadding(new Insets(10, 10, 10, 10));
-            stage.setScene(new Scene(root));
+            stage.setScene(new Scene(root, 640, 480));
             stage.setTitle("raftchat");
             chatField.requestFocus();
             stage.show();

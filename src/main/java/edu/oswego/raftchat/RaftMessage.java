@@ -48,6 +48,8 @@ public class RaftMessage {
         return entries;
     }
 
+    public ChatMessage getChatMessage() { return chatMessage; }
+
     public Integer getLeaderCommit() {
         return leaderCommit;
     }
