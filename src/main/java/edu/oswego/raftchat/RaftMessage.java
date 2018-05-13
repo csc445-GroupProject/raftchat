@@ -4,6 +4,7 @@ import java.io.*;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -208,7 +209,8 @@ public class RaftMessage {
                 return RaftMessage.appendResponse(term, success);
             }
             case CHAT_MESSAGE: {
-                return RaftMessage.chatMessage(ChatMessage.fromByteArray(bytes));
+                // skip message size and type
+                return RaftMessage.chatMessage(ChatMessage.fromByteArray(Arrays.copyOfRange(bytes, 8, bytes.length)));
             }
             case HOST_LIST: {
                 int size = in.readInt();

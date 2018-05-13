@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Objects;
 
 public class ChatMessage {
     private Instant timestamp;
@@ -71,5 +72,20 @@ public class ChatMessage {
         String timeString = localTime.format(DateTimeFormatter.ofPattern("H:m:s"));
 
         return String.format("(%s) %s: %s",timeString, username, text);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ChatMessage that = (ChatMessage) o;
+        return timestamp.toEpochMilli() == that.timestamp.toEpochMilli() &&
+                Objects.equals(username, that.username) &&
+                Objects.equals(text, that.text);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(timestamp, username, text);
     }
 }
