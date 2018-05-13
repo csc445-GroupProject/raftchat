@@ -69,7 +69,7 @@ public class ChatMessage {
     @Override
     public String toString() {
         ZonedDateTime localTime = timestamp.atZone(ZoneId.systemDefault());
-        String timeString = localTime.format(DateTimeFormatter.ofPattern("H:m:s"));
+        String timeString = localTime.format(DateTimeFormatter.ofPattern("H:m:ss"));
 
         return String.format("(%s) %s: %s",timeString, username, text);
     }

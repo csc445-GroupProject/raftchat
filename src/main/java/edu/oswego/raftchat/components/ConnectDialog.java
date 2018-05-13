@@ -63,8 +63,10 @@ public class ConnectDialog extends Dialog<Map<String, String>> {
             if(type == connectButtonType) {
                 Map<String, String> result = new HashMap<>();
                 result.put("username", username.getText().trim());
-                result.put("server", server.getText().trim());
-                result.put("port", port.getText().trim());
+                if(connectToNodeCheck.isSelected()) {
+                    result.put("server", server.getText().trim());
+                    result.put("port", port.getText().trim());
+                }
                 return result;
             }
             return null;

@@ -10,6 +10,7 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
+import javafx.scene.input.KeyCode;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
@@ -20,6 +21,7 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.text.ParseException;
+import java.time.Instant;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.regex.Matcher;
@@ -103,6 +105,14 @@ public class App extends Application {
             Button sendButton = new Button("Send");
             HBox inputBox = new HBox(10, chatField, sendButton);
 
+            sendButton.setOnMouseClicked(mouseEvent -> {
+                sendChatMessage();
+            });
+
+            chatField.setOnKeyPressed(keyEvent -> {
+                if(keyEvent.getCode() == KeyCode.ENTER)
+                    sendChatMessage();
+            });
 
             VBox root = new VBox(10, chatArea, inputBox);
             root.setPadding(new Insets(10, 10, 10, 10));
@@ -110,6 +120,26 @@ public class App extends Application {
             stage.setTitle("raftchat");
             chatField.requestFocus();
             stage.show();
+
+            Thread chatAppendThread = new Thread(() -> {
+                while(true) {
+                    try {
+                        chatArea.appendText(chatQueue.take().toString() + "\n");
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }, "ChatAppendThread");
+
+            chatAppendThread.setDaemon(true);
+            chatAppendThread.start();
         });
+    }
+
+    // vv placeholder please change
+    private void sendChatMessage() {
+        String text = chatField.getText().trim();
+        chatQueue.add(new ChatMessage(Instant.now(), username, text));
+        chatField.clear();
     }
 }
