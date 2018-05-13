@@ -15,6 +15,7 @@ import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
 import java.net.InetSocketAddress;
+import java.text.ParseException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.regex.Matcher;
@@ -51,12 +52,11 @@ public class App extends Application {
                 .parse(args);
 
         if (options.server != null) {
-            Matcher addressMatcher = Pattern.compile("^(.*):(\\d+)$").matcher(options.server.trim());
-            if (addressMatcher.matches()) {
-                String host = addressMatcher.group(1);
-                int port = Integer.parseInt(addressMatcher.group(2));
-
-                initAddress = new InetSocketAddress(host, port);
+            try {
+                String[] address = options.server.trim().split(":");
+                initAddress = new InetSocketAddress(address[0], Integer.parseInt(address[1]));
+            } catch (ArrayIndexOutOfBoundsException|NumberFormatException e) {
+                e.printStackTrace();
             }
         }
 
@@ -77,7 +77,7 @@ public class App extends Application {
             connectDialog = new ConnectDialog();
         }
 
-        new ConnectDialog().showAndWait().ifPresent(m -> {
+        connectDialog.showAndWait().ifPresent(m -> {
             username = m.get("username");
             String addr = m.get("server");
 
