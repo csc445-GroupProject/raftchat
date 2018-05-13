@@ -6,6 +6,7 @@ import edu.oswego.raftchat.components.ConnectDialog;
 import javafx.application.Application;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
@@ -14,7 +15,10 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.UnknownHostException;
 import java.text.ParseException;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -29,6 +33,7 @@ public class App extends Application {
     private String username;
     private TextField chatField;
     private TextArea chatArea;
+    private Socket leaderSocket;
 
     private static class Options {
         @Parameter(names = "-no-client", description = "Run raft peer without chat client")
@@ -79,9 +84,16 @@ public class App extends Application {
 
         connectDialog.showAndWait().ifPresent(m -> {
             username = m.get("username");
-            String addr = m.get("server");
 
-            int port = Integer.parseInt(m.get("port"));
+            if(m.containsKey("server")) {
+                String host = m.get("server");
+                int port = Integer.parseInt(m.get("port"));
+                try {
+                    leaderSocket = new Socket(host, port);
+                } catch (IOException e) {
+                    new Alert(Alert.AlertType.ERROR, String.format("Could not connect to node %s:%d", host, port)).showAndWait();
+                }
+            }
 
             chatField = new TextField();
             chatArea = new TextArea();

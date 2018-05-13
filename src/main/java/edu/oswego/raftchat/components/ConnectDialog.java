@@ -53,9 +53,9 @@ public class ConnectDialog extends Dialog<Map<String, String>> {
 
         Node connectButton = getDialogPane().lookupButton(connectButtonType);
         connectButton.disableProperty().bind(username.textProperty().isEmpty()
-                .and(connectToNodeCheck.selectedProperty().not())
-                .or(server.textProperty().isEmpty()
-                .or(port.textProperty().isEmpty())));
+                .or(connectToNodeCheck.selectedProperty()
+                        .and(server.textProperty().isEmpty()
+                        .or(port.textProperty().isEmpty()))));
 
         Platform.runLater(username::requestFocus);
 
