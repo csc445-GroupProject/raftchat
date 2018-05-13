@@ -3,10 +3,7 @@ package edu.oswego.raftchat.components;
 import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.scene.Node;
-import javafx.scene.control.ButtonBar;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.Dialog;
-import javafx.scene.control.TextField;
+import javafx.scene.control.*;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
@@ -45,14 +42,20 @@ public class ConnectDialog extends Dialog<Map<String, String>> {
         port.prefWidthProperty().bind(serverBox.widthProperty().divide(3));
 
         serverBox.getChildren().addAll(server, port);
-        mainBox.getChildren().addAll(username, serverBox);
+
+        CheckBox connectToNodeCheck = new CheckBox("Connect to existing node");
+        server.disableProperty().bind(connectToNodeCheck.selectedProperty().not());
+        port.disableProperty().bind(connectToNodeCheck.selectedProperty().not());
+
+        mainBox.getChildren().addAll(username, connectToNodeCheck, serverBox);
 
         getDialogPane().setContent(mainBox);
 
         Node connectButton = getDialogPane().lookupButton(connectButtonType);
         connectButton.disableProperty().bind(username.textProperty().isEmpty()
-                .or(server.textProperty().isEmpty())
-                .or(port.textProperty().isEmpty()));
+                .and(connectToNodeCheck.selectedProperty().not())
+                .or(server.textProperty().isEmpty()
+                .or(port.textProperty().isEmpty())));
 
         Platform.runLater(username::requestFocus);
 
