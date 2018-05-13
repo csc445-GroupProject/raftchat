@@ -15,7 +15,7 @@ plugins {
 }
 
 // Define the main class for the application
-mainClassName = 'App'
+mainClassName = 'edu.oswego.raftchat.App'
 
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
