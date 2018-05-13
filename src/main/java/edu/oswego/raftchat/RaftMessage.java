@@ -97,6 +97,35 @@ public class RaftMessage {
         this.hostnames = hostnames;
     }
 
+    private RaftMessage(MessageType type, Integer term, Integer candidateId, Integer lastLogIndex, Integer lastLogTerm) {
+        this.type = type;
+        this.term = term;
+        this.candidateId = candidateId;
+        this.lastLogIndex = lastLogIndex;
+        this.lastLogTerm = lastLogTerm;
+    }
+
+    private RaftMessage(MessageType type, Integer term, Boolean voteGranted) {
+        this.type = type;
+        this.term = term;
+        this.voteGranted = voteGranted;
+    }
+
+    private RaftMessage(MessageType type, Integer term, Integer leaderId, Integer prevLogIndex, Integer prevLogTerm, List<LogEntry> entries, Integer leaderCommit) {
+        this.type = type;
+        this.term = term;
+        this.leaderId = leaderId;
+        this.prevLogIndex = prevLogIndex;
+        this.prevLogTerm = prevLogTerm;
+        this.entries = entries;
+        this.leaderCommit = leaderCommit;
+    }
+
+    private RaftMessage(MessageType type, ChatMessage chatMessage) {
+        this.type = type;
+        this.chatMessage = chatMessage;
+    }
+
     /**
      * Creates a RaftMessage to request votes from peer nodes during leader elections
      * @param term the sending node's current election term
@@ -106,8 +135,7 @@ public class RaftMessage {
      * @return a RaftMessage that can be used for requesting votes from peer nodes
      */
     public static RaftMessage voteRequest(int term, int candidateId, int lastLogIndex, int lastLogTerm) {
-        return new RaftMessage(MessageType.VOTE_REQUEST, term, null, null, null, null, null, null, candidateId, lastLogIndex,
-                lastLogTerm, null, null, null);
+        return new RaftMessage(MessageType.VOTE_REQUEST, term, candidateId, lastLogIndex, lastLogTerm);
     }
 
     /**
@@ -117,7 +145,7 @@ public class RaftMessage {
      * @return A RaftMessage that will be sent to the requesting node
      */
     public static RaftMessage voteResponse(int term, boolean voteGranted) {
-        return new RaftMessage(MessageType.VOTE_RESPONSE, term, null, null, null, null, null, null, null, null, null, null, voteGranted, null);
+        return new RaftMessage(MessageType.VOTE_RESPONSE, term, voteGranted);
     }
 
     /**
@@ -133,7 +161,7 @@ public class RaftMessage {
      * log
      */
     public static RaftMessage appendRequest(int term, int leaderId, int prevLogIndex, int prevLogTerm, List<LogEntry> entries, int leaderCommit) {
-        return new RaftMessage(MessageType.APPEND_REQUEST, term, leaderId, prevLogIndex, prevLogTerm, entries, null, leaderCommit, null, null, null, null, null, null);
+        return new RaftMessage(MessageType.APPEND_REQUEST, term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit);
     }
 
     /**
@@ -144,7 +172,7 @@ public class RaftMessage {
      * @return A RaftMessage to respond to an appendRequest message
      */
     public static RaftMessage appendResponse(int term, boolean success) {
-        return new RaftMessage(MessageType.APPEND_RESPONSE, term, null, null, null, null, null, null, null, null, null, success, null, null);
+        return new RaftMessage(MessageType.APPEND_RESPONSE, term, success);
     }
 
     /**
@@ -153,7 +181,7 @@ public class RaftMessage {
      * @return A RaftMessage to send to the leader node to append to the log
      */
     public static RaftMessage chatMessage(ChatMessage message) {
-        return new RaftMessage(MessageType.CHAT_MESSAGE, null, null, null, null, null, message, null, null, null, null, null, null, null);
+        return new RaftMessage(MessageType.CHAT_MESSAGE, message);
     }
 
     public static RaftMessage hostnameList(List<String> hostnames) {
