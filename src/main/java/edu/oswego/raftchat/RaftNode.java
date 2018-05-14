@@ -274,7 +274,7 @@ public class RaftNode implements Runnable {
 
                     int n = log.size() - 1;
                     for(; n >= commitIndex; n--) {
-                        int count = 0;
+                        int count = 1;
                         if(log.get(n).getTerm() == currentTerm) {
                             for(Integer i : matchIndex.values()) {
                                 if(i >= n)
