@@ -105,10 +105,13 @@ public class RaftMessage {
         this.lastLogTerm = lastLogTerm;
     }
 
-    private RaftMessage(MessageType type, Integer term, Boolean voteGranted) {
+    private RaftMessage(MessageType type, Integer term, Boolean success) {
         this.type = type;
         this.term = term;
-        this.voteGranted = voteGranted;
+        if(type == MessageType.VOTE_RESPONSE)
+            this.voteGranted = success;
+        else if (type == MessageType.APPEND_RESPONSE)
+            this.success = success;
     }
 
     private RaftMessage(MessageType type, Integer term, Integer leaderId, Integer prevLogIndex, Integer prevLogTerm, List<LogEntry> entries, Integer leaderCommit) {
