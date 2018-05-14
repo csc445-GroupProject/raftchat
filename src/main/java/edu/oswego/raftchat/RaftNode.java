@@ -1,15 +1,13 @@
 package edu.oswego.raftchat;
 
+import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.lang.reflect.Array;
-import java.lang.reflect.Parameter;
-import java.net.InetAddress;
-import java.net.InetSocketAddress;
-import java.net.ServerSocket;
-import java.net.Socket;
+import java.io.InputStreamReader;
+import java.net.*;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class RaftNode implements Runnable {
     private String hostName;
@@ -18,23 +16,26 @@ public class RaftNode implements Runnable {
     private InetSocketAddress me;
     private InetSocketAddress votedFor;
     private List<LogEntry> log = Collections.synchronizedList(new ArrayList<>());
-    private State state = State.FOLLOWER;
+    private AtomicReference<State> state = new AtomicReference<>();
     private int commitIndex = -1;
     private int lastApplied = -1;
     private ServerSocket serverSocket;
     private Set<Socket> clients = Collections.newSetFromMap(new ConcurrentHashMap<>());
-    private Set<Socket> peers = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private Map<InetSocketAddress, Socket> peers = new ConcurrentHashMap<>();
     private InetSocketAddress leaderId;
     private int votesForCurrentTerm = 0;
     private int numberOfVotes = 0;
     private int majority = 0;
 
     // leader state
-    Map<InetSocketAddress, Integer> nextIndex = new ConcurrentHashMap<>();
-    Map<InetSocketAddress, Integer> matchIndex = new ConcurrentHashMap<>();
+    private Map<InetSocketAddress, Integer> nextIndex = new ConcurrentHashMap<>();
+    private Map<InetSocketAddress, Integer> matchIndex = new ConcurrentHashMap<>();
 
     // queue to send to client
-    BlockingQueue<ChatMessage> clientQueue;
+    private BlockingQueue<ChatMessage> clientQueue;
+
+    // incoming message queue
+    private BlockingQueue<RaftMessage> messageQueue = new LinkedBlockingQueue<>();
 
     enum State {
         LEADER, CANDIDATE, FOLLOWER
@@ -43,16 +44,25 @@ public class RaftNode implements Runnable {
     /* CONSTRUCTORS
     --------------------------------------------------------------------------------------------------------------------
      */
-    public RaftNode(String hostName, int initialPort, BlockingQueue clientQueue) throws IOException {
+    public RaftNode(String hostName, int initialPort, BlockingQueue<ChatMessage> clientQueue) throws IOException {
         this(hostName, initialPort, clientQueue, 0);
     }
 
-    public RaftNode(String hostName, int initialPort, BlockingQueue clientQueue, int serverSocketPort) throws IOException {
+    public RaftNode(String hostName, int initialPort, BlockingQueue<ChatMessage> clientQueue, int serverSocketPort) throws IOException {
+
+        // get external ip
+        URL whatismyip = new URL("http://checkip.amazonaws.com");
+        BufferedReader in = new BufferedReader(new InputStreamReader(
+                whatismyip.openStream()));
+
+        String ip = in.readLine();
+
+        this.state.set(State.FOLLOWER);
         this.clientQueue = clientQueue;
         serverSocket = new ServerSocket(serverSocketPort);
         this.hostName = hostName;
         this.initialPort = initialPort;
-        me = new InetSocketAddress(this.hostName, this.initialPort);
+        me = new InetSocketAddress(ip, serverSocketPort);
 
     }
 
@@ -67,14 +77,91 @@ public class RaftNode implements Runnable {
      */
     @Override
     public void run() {
+        Map<InetSocketAddress, Socket> newPeers = new HashMap<>();
+        try {
+            newPeers.put(new InetSocketAddress(hostName, initialPort), new Socket(hostName, initialPort));
+            updatePeers(newPeers);
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.out.println("Could not connect to initial peer");
+            return;
+        }
+
         while (true) {
-            switch (state) {
+            switch (state.get()) {
                 case FOLLOWER: {
-                    //TODO respond to all incoming messages appropriately, forward messages to the leader that are sent
-                    //TODO             by unknowing clients.
+                    long electionDelay = ThreadLocalRandom.current().nextLong(150, 300);
+                    ScheduledExecutorService electionTimeout = Executors.newSingleThreadScheduledExecutor();
+                    ScheduledFuture timeoutFuture = electionTimeout.schedule(() -> {
+                        state.compareAndSet(State.FOLLOWER, State.CANDIDATE);
+                    }, electionDelay, TimeUnit.MILLISECONDS);
+
+                    while(state.get() == State.FOLLOWER) {
+                        try {
+                            RaftMessage newMessage = messageQueue.poll(100, TimeUnit.MILLISECONDS);
+                            if(newMessage != null) {
+                                switch(newMessage.getType()) {
+                                    case APPEND_REQUEST: {
+                                        timeoutFuture.cancel(false);
+                                        leaderId = new InetSocketAddress(newMessage.getLeaderHostname(), newMessage.getLeaderPort());
+                                        timeoutFuture = electionTimeout.schedule(() -> {
+                                            state.compareAndSet(State.FOLLOWER, State.CANDIDATE);
+                                        }, electionDelay, TimeUnit.MILLISECONDS);
+
+                                        new Thread(() -> {
+                                            int prevLogIndex = newMessage.getPrevLogIndex();
+                                            int prevLogTerm = newMessage.getPrevLogTerm();
+                                            LogEntry prevEntry = log.get(prevLogIndex);
+
+                                            boolean success = true;
+                                            if(newMessage.getTerm() < currentTerm || prevEntry == null || prevEntry.getTerm() != prevLogTerm)
+                                                success = false;
+                                            else if(!newMessage.getEntries().isEmpty()) {
+                                                log.subList(prevLogIndex + 1, log.size()).clear();
+                                                log.addAll(newMessage.getEntries());
+                                            }
+
+                                            if(newMessage.getLeaderCommit() > commitIndex)
+                                                commitIndex = Math.min(newMessage.getLeaderCommit(), log.size() - 1);
 
 
-                    //TODO if timeout occurs start leader elections
+                                            Socket leader = peers.get(leaderId);
+                                            try {
+                                                leader.getOutputStream().write(RaftMessage.appendResponse(currentTerm, success).toByteArray());
+                                                leader.getOutputStream().flush();
+                                            } catch (IOException e) {
+                                                e.printStackTrace();
+                                            }
+                                        }).start();
+                                        break;
+                                    }
+                                    case VOTE_REQUEST: {
+                                        new Thread(() -> {
+                                            InetSocketAddress candidateId = new InetSocketAddress(newMessage.getCandidateHostname(), newMessage.getCandidatePort());
+                                            int lastLogIndex = newMessage.getLastLogIndex();
+                                            int lastLogTerm = newMessage.getLastLogTerm();
+
+                                            boolean voteGranted = newMessage.getTerm() >= currentTerm
+                                                    && (votedFor == null || votedFor.equals(candidateId))
+                                                    && ((lastLogIndex == log.size() - 1 && log.get(lastLogIndex).getTerm() <= lastLogTerm)
+                                                        || lastLogIndex >= log.size());
+
+                                            Socket candidate = peers.get(candidateId);
+                                            try {
+                                                candidate.getOutputStream().write(RaftMessage.voteResponse(currentTerm, voteGranted).toByteArray());
+                                                candidate.getOutputStream().flush();
+                                            } catch (IOException e) {
+                                                e.printStackTrace();
+                                            }
+                                        }).start();
+                                        break;
+                                    }
+                                }
+                            }
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                    }
                     break;
                 }
                 case CANDIDATE: {
@@ -104,6 +191,41 @@ public class RaftNode implements Runnable {
         }
     }
 
+    private void updatePeers(Map<InetSocketAddress, Socket> newPeers) {
+        for(Socket peer : peers.values()) {
+            try {
+                peer.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+
+        peers.clear();
+        peers.entrySet().addAll(newPeers.entrySet());
+
+        for(final Socket peer : peers.values()) {
+            new Thread(() -> {
+                Socket p = peer;
+                RaftMessageBuffer messageBuffer = new RaftMessageBuffer();
+                byte[] buff = new byte[8192];
+                int read;
+
+                while (true) {
+                    try {
+                        while(!messageBuffer.hasNext()) {
+                            read = p.getInputStream().read(buff);
+                            messageBuffer.addToBuffer(buff, read);
+                        }
+                    } catch (IOException e) {
+                        return;
+                    }
+
+                    messageQueue.add(messageBuffer.next());
+                }
+            }).start();
+        }
+    }
+
     private void listen() {
         while(true) {
             try (Socket newConnection = serverSocket.accept()) {
@@ -125,7 +247,7 @@ public class RaftNode implements Runnable {
 
                                     switch (message.getType()) {
                                         case CHAT_MESSAGE: {
-                                            if (state == State.LEADER) {
+                                            if (state.get() == State.LEADER) {
                                                 log.add(new LogEntry(currentTerm, message.getChatMessage()));
                                                 client.getOutputStream().write(RaftMessage.hostnameList(new ArrayList<>()).toByteArray());
                                             } else if (leaderId != null) {
@@ -160,17 +282,16 @@ public class RaftNode implements Runnable {
 
 
     public RaftMessage appendEntries(Socket socket) {
-        InetAddress peerAddress = socket.getInetAddress();
+        InetSocketAddress peerAddress = (InetSocketAddress) socket.getRemoteSocketAddress();
         int index = nextIndex.get(peerAddress);
 
-
         //NULL MUST BE REPLACED WITH LIST OF ENTRIES ON LINE 168, WAS ONLY ADDED FOR COMPILABILITY PURPOSES.
-        return RaftMessage.appendRequest(currentTerm,me.getHostName(), me.getPort(), lastApplied, log.get(lastApplied).getTerm(), null, commitIndex);
+        return RaftMessage.appendRequest(currentTerm, me.getHostName(), me.getPort(), lastApplied, log.get(lastApplied).getTerm(), log.subList(index, log.size()), commitIndex);
 
     }
 
     public RaftMessage sendHeartbeat() {
-        return RaftMessage.appendRequest(currentTerm, me.getHostName(), me.getPort(), lastApplied, log.get(lastApplied).getTerm(), null, commitIndex);
+        return RaftMessage.appendRequest(currentTerm, me.getHostName(), me.getPort(), lastApplied, log.get(lastApplied).getTerm(), new ArrayList<>(), commitIndex);
     }
 
     public void sendAppendEntries(RaftMessage message, Socket socket) {
@@ -245,14 +366,14 @@ public class RaftNode implements Runnable {
      * at least the majority of votes and they are the first node to time out after the initial run.
      */
     public void startElection() {
-        state = State.CANDIDATE;
+        state.compareAndSet(State.FOLLOWER, State.CANDIDATE);
         currentTerm++;
         votedFor = me;
         int size = peers.size();
         Random r = new Random();
         int electionTimeout = r.nextInt(150) + 150;
         Socket[] peerSockets = new Socket[size];
-        peers.toArray(peerSockets);
+        peers.values().toArray(peerSockets);
 
         for (int i=0; i<size; i++) {
             final int iFinal = i;
@@ -274,10 +395,14 @@ public class RaftNode implements Runnable {
     private void updateVoteCount() {
         numberOfVotes++;
 
-        if(numberOfVotes > majority) { // doesn't work right now because majority isn't related to peers yet.
-            state = State.LEADER;
+        if(numberOfVotes > majority()) {
+            state.compareAndSet(State.CANDIDATE, State.LEADER);
             numberOfVotes = 0;
         }
+    }
+
+    private int majority() {
+        return (peers.size() + 1) / 2 + 1;
     }
 
     /*

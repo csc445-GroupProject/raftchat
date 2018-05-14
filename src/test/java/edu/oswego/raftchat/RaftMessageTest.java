@@ -13,7 +13,7 @@ public class RaftMessageTest {
 
     @Test
     public void voteRequest() throws IOException {
-        RaftMessage expected = RaftMessage.voteRequest(4, 6, 8, 3);
+        RaftMessage expected = RaftMessage.voteRequest(4, "host", 8, 3, 2);
         RaftMessage result = RaftMessage.fromByteArray(expected.toByteArray());
         assertEquals(expected, result);
     }
@@ -32,7 +32,7 @@ public class RaftMessageTest {
         entries.add(new LogEntry(8, new ChatMessage("user2","message2" )));
         entries.add(new LogEntry(9, new ChatMessage("user3","message3" )));
         entries.add(new LogEntry(67, new ChatMessage("user4","message4" )));
-        RaftMessage expected = RaftMessage.appendRequest(4, 8, 7, 3, entries, 6);
+        RaftMessage expected = RaftMessage.appendRequest(4, "host", 7, 3, 2, entries, 6);
         RaftMessage result = RaftMessage.fromByteArray(expected.toByteArray());
         assertEquals(expected, result);
     }
