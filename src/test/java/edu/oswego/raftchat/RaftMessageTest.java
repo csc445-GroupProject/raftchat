@@ -28,11 +28,11 @@ public class RaftMessageTest {
     @Test
     public void appendRequest() throws IOException {
         List<LogEntry> entries = new ArrayList<>();
-        entries.add(new LogEntry(3, new ChatMessage("user1","message1" )));
-        entries.add(new LogEntry(8, new ChatMessage("user2","message2" )));
-        entries.add(new LogEntry(9, new ChatMessage("user3","message3" )));
-        entries.add(new LogEntry(67, new ChatMessage("user4","message4" )));
-        RaftMessage expected = RaftMessage.appendRequest(4, "host", 7, 3, 2, entries, 6);
+        entries.add(new LogEntry(LogEntry.Type.CHAT, 3, new ChatMessage("user1","message1" ), null));
+        entries.add(new LogEntry(LogEntry.Type.CHAT, 8, new ChatMessage("user2","message2" ), null));
+        entries.add(new LogEntry(LogEntry.Type.CHAT, 9, new ChatMessage("user3","message3" ), null));
+        entries.add(new LogEntry(LogEntry.Type.CHAT, 67, new ChatMessage("user4","message4" ), null));
+        RaftMessage expected = RaftMessage.appendRequest(4, "google.com", 80, 3, 2, entries, 6);
         RaftMessage result = RaftMessage.fromByteArray(expected.toByteArray());
         assertEquals(expected, result);
     }
@@ -47,14 +47,6 @@ public class RaftMessageTest {
     @Test
     public void chatMessage() throws IOException {
         RaftMessage expected = RaftMessage.chatMessage(new ChatMessage("user1","message1" ));
-        RaftMessage result = RaftMessage.fromByteArray(expected.toByteArray());
-        assertEquals(expected, result);
-    }
-
-    @Test
-    public void hostList() throws IOException {
-        String[] hosts = {"pi.cs.oswego.edu", "www.example.com", "www.coolmathgames.com"};
-        RaftMessage expected = RaftMessage.hostnameList(Arrays.asList(hosts));
         RaftMessage result = RaftMessage.fromByteArray(expected.toByteArray());
         assertEquals(expected, result);
     }

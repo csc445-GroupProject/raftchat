@@ -4,10 +4,7 @@ import java.io.*;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 
 public class RaftMessage {
     private MessageType type;
@@ -251,11 +248,27 @@ public class RaftMessage {
                 List<LogEntry> entries = new ArrayList<>();
 
                 for (int i = 0; i < size; i++) {
+                    LogEntry.Type logType = LogEntry.Type.values()[in.readInt()];
                     int entryTerm = in.readInt();
-                    Instant timestamp = Instant.ofEpochMilli(in.readLong());
-                    String username = in.readUTF();
-                    String text = in.readUTF();
-                    entries.add(new LogEntry(entryTerm, new ChatMessage(timestamp, username, text)));
+                    switch (logType) {
+                        case CHAT: {
+                            Instant timestamp = Instant.ofEpochMilli(in.readLong());
+                            String username = in.readUTF();
+                            String text = in.readUTF();
+                            entries.add(new LogEntry(LogEntry.Type.CHAT, entryTerm, new ChatMessage(timestamp, username, text), null));
+                            break;
+                        }
+                        case CONFIG: {
+                            ObjectInputStream ois = new ObjectInputStream(bais);
+
+                            try {
+                                Set<InetSocketAddress> config = (HashSet<InetSocketAddress>) ois.readObject();
+                                entries.add(new LogEntry(LogEntry.Type.CONFIG, entryTerm, null, config));
+                            } catch (ClassNotFoundException e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    }
                 }
 
                 int leaderCommit = in.readInt();
@@ -314,8 +327,14 @@ public class RaftMessage {
                     out.writeInt(entries.size());
 
                     for (LogEntry e : entries) {
-                        out.writeInt(e.getTerm());
-                        out.write(e.getMessage().toByteArray());
+                        out.writeInt(e.getType().ordinal());
+                        if(e.getType() == LogEntry.Type.CHAT) {
+                            out.writeInt(e.getTerm());
+                            out.write(e.getMessage().toByteArray());
+                        } else {
+                            ObjectOutputStream oos = new ObjectOutputStream(baos);
+                            oos.writeObject(e.getConfig());
+                        }
                     }
 
                     out.writeInt(leaderCommit);
