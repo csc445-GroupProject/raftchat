@@ -218,17 +218,6 @@ public class RaftNode implements Runnable {
                     break;
                 }
                 case LEADER: {
-                    //TODO Send initial heartbeat before any other correspondence, as soon as the node is chosen as leader
-
-                    //TODO while (Still leader)
-                    //TODO listen for commands from clients(NOT OTHER NODES)
-                    //TODO append those changes to the local log
-                    //TODO tell peer nodes to append the changes to their logs as well
-
-                    //TODO if lastApplied>= next index, send Append Entries starting at nextIndex, if successful update
-                    //TODO               nextindex and matchIndex for the follower
-
-                    //TODO if append entries fails due to log inconsistency nextIndex-- and retry
 
                     while (state.get() == State.LEADER) {
                         for (final Socket p : peers.values()) {
@@ -416,21 +405,105 @@ public class RaftNode implements Runnable {
      */
 
 
+    /**
+     * creates an appendEntries message to be sent to the peer nodes
+     * @param socket The socket from which the append request will be sent from
+     * @return The RaftMessage to be sent to the peer nodes
+     */
     public RaftMessage appendEntries(Socket socket) {
         InetSocketAddress peerAddress = (InetSocketAddress) socket.getRemoteSocketAddress();
         int index = nextIndex.get(peerAddress);
 
-        //NULL MUST BE REPLACED WITH LIST OF ENTRIES ON LINE 168, WAS ONLY ADDED FOR COMPILABILITY PURPOSES.
         return RaftMessage.appendRequest(currentTerm, me.getHostName(), me.getPort(), lastApplied, log.get(lastApplied).getTerm(), log.subList(index, log.size()), commitIndex);
-
     }
 
+    /**
+     * creates an appendEntries message with an empty arrayList of entries to act as the heartbeat
+     * @return the heartbeat message
+     */
     public RaftMessage heartbeat() {
         return RaftMessage.appendRequest(currentTerm, me.getHostName(), me.getPort(), lastApplied, log.get(lastApplied).getTerm(), new ArrayList<>(), commitIndex);
     }
 
+    /**
+     * Sends the appendEntries message that was previously created to a peer node through the given socket
+     * @param message The message to be passed to the peer node
+     * @param socket The socket that the message will be sent from
+     */
     public void sendAppendEntries(RaftMessage message, Socket socket) {
+        try {
+            DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+            out.write(message.toByteArray());
+        } catch(IOException e) {
+            System.out.println("The Output stream could not be created");
+        }
+    }
 
+    /**
+     * Analyzes the appendEntries request and acts accordingly. The node will then send its acknowledgement back to the
+     * leader node who initially sent the request.
+     * @param request The raft Message that was sent to the local node requesting to append Entries
+     * @param socket The leader node's socket.
+     */
+    public void appendEntriesResponse(RaftMessage request, Socket socket) {
+        if(request.getType() == MessageType.APPEND_REQUEST) {
+            boolean success = true;
+            RaftMessage response;
+            if(request.getTerm() < currentTerm) {
+                success = false;
+            }
+            if(log.get(request.getPrevLogIndex()).getTerm() != request.getPrevLogTerm()) {
+                success = false;
+            }
+            List<LogEntry> newEntries = request.getEntries();
+             int startingPoint = request.getPrevLogIndex();
+
+             for(LogEntry entry : newEntries) {
+                 startingPoint++;
+                 if(log.get(startingPoint) != null) {
+                     if(log.get(startingPoint).getTerm() != entry.getTerm()) {
+                         deleteLogEntries(log.indexOf(entry));
+                     }
+                 }
+             }
+             appendNewEntriesToLog(newEntries);
+             if(request.getLeaderCommit() > commitIndex) {
+                 commitIndex = min(request.getLeaderCommit(), log.size()-1);
+             }
+             response = RaftMessage.appendResponse(currentTerm, success);
+             try {
+                 DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+                 out.write(response.toByteArray());
+             } catch(IOException e) {
+                 System.out.println("An IO Exception has occurred while opening the output stream");
+             }
+        }
+    }
+
+    private int min(int leaderCommit, int lastNewEntryIndex) {
+        if(leaderCommit<lastNewEntryIndex)
+            return leaderCommit;
+        return lastNewEntryIndex;
+    }
+
+    /**
+     * adds the LogEntry objects to the log
+     * @param entries the list of new log entries
+     */
+    public void appendNewEntriesToLog(List<LogEntry> entries) {
+        for(LogEntry entry : entries) {
+            log.add(entry);
+        }
+    }
+
+    /**
+     * deletes all log entries after a specified index, to account for unmatching logs.
+     * @param startingIndex
+     */
+    public void deleteLogEntries(int startingIndex) {
+        for(int i=startingIndex; i<log.size(); i++) {
+            log.remove(i);
+        }
     }
 
     /*
