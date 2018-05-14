@@ -163,7 +163,9 @@ public class RaftNode implements Runnable {
         InetAddress peerAddress = socket.getInetAddress();
         int index = nextIndex.get(peerAddress);
 
-        return RaftMessage.appendRequest(currentTerm,me.getHostName(), me.getPort(), lastApplied, log.get(lastApplied).getTerm(), , commitIndex);
+
+        //NULL MUST BE REPLACED WITH LIST OF ENTRIES ON LINE 168, WAS ONLY ADDED FOR COMPILABILITY PURPOSES.
+        return RaftMessage.appendRequest(currentTerm,me.getHostName(), me.getPort(), lastApplied, log.get(lastApplied).getTerm(), null, commitIndex);
 
     }
 
