@@ -1,6 +1,7 @@
 package edu.oswego.raftchat;
 
 import java.io.*;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -11,13 +12,17 @@ import java.util.Objects;
 public class RaftMessage {
     private MessageType type;
     private Integer term;
-    private Integer leaderId;
+    private String leaderHostname;
+    private Integer leaderPort;
+    private InetSocketAddress leaderId;
     private Integer prevLogIndex;
     private Integer prevLogTerm;
     private List<LogEntry> entries;
     private ChatMessage chatMessage;
     private Integer leaderCommit;
-    private Integer candidateId;
+    private String candidateHostname;
+    private Integer candidatePort;
+    private InetSocketAddress candidateId;
     private Integer lastLogIndex;
     private Integer lastLogTerm;
     private Boolean success;
@@ -32,7 +37,11 @@ public class RaftMessage {
         return term;
     }
 
-    public Integer getLeaderId() {
+    public String getLeaderHostname() { return leaderHostname; }
+
+    public Integer getLeaderPort() { return leaderPort; }
+
+    public InetSocketAddress getLeaderId() {
         return leaderId;
     }
 
@@ -54,7 +63,11 @@ public class RaftMessage {
         return leaderCommit;
     }
 
-    public Integer getCandidateId() {
+    public String getCandidateHostname() { return candidateHostname; }
+
+    public Integer getCandidatePort() { return candidatePort; }
+
+    public InetSocketAddress getCandidateId() {
         return candidateId;
     }
 
@@ -78,18 +91,22 @@ public class RaftMessage {
         return hostnames;
     }
 
-    private RaftMessage(MessageType type, Integer term, Integer leaderId, Integer prevLogIndex, Integer prevLogTerm,
-                        List<LogEntry> entries, ChatMessage chatMessage, Integer leaderCommit, Integer candidateId,
+    private RaftMessage(MessageType type, Integer term, String leaderHostname, Integer leaderPort, Integer prevLogIndex, Integer prevLogTerm,
+                        List<LogEntry> entries, ChatMessage chatMessage, Integer leaderCommit, String candidateHostname, Integer candidatePort,
                         Integer lastLogIndex, Integer lastLogTerm, Boolean success, Boolean voteGranted, List<String> hostnames) {
         this.type = type;
         this.term = term;
-        this.leaderId = leaderId;
+        this.leaderHostname = leaderHostname;
+        this.leaderPort = leaderPort;
+        this.leaderId = new InetSocketAddress(this.leaderHostname, this.leaderPort);
         this.prevLogIndex = prevLogIndex;
         this.prevLogTerm = prevLogTerm;
         this.entries = entries;
         this.chatMessage = chatMessage;
         this.leaderCommit = leaderCommit;
-        this.candidateId = candidateId;
+        this.candidateHostname = candidateHostname;
+        this.candidatePort = candidatePort;
+        this.candidateId = new InetSocketAddress(this.candidateHostname, this.candidatePort);
         this.lastLogIndex = lastLogIndex;
         this.lastLogTerm = lastLogTerm;
         this.success = success;
@@ -97,10 +114,12 @@ public class RaftMessage {
         this.hostnames = hostnames;
     }
 
-    private RaftMessage(MessageType type, Integer term, Integer candidateId, Integer lastLogIndex, Integer lastLogTerm) {
+    private RaftMessage(MessageType type, Integer term, String candidateHostname, Integer candidatePort, Integer lastLogIndex, Integer lastLogTerm) {
         this.type = type;
         this.term = term;
-        this.candidateId = candidateId;
+        this.candidateHostname = candidateHostname;
+        this.candidatePort = candidatePort;
+        this.candidateId = new InetSocketAddress(this.candidateHostname, this.candidatePort);
         this.lastLogIndex = lastLogIndex;
         this.lastLogTerm = lastLogTerm;
     }
@@ -114,10 +133,12 @@ public class RaftMessage {
             this.success = success;
     }
 
-    private RaftMessage(MessageType type, Integer term, Integer leaderId, Integer prevLogIndex, Integer prevLogTerm, List<LogEntry> entries, Integer leaderCommit) {
+    private RaftMessage(MessageType type, Integer term, String leaderHostname, Integer leaderPort, Integer prevLogIndex, Integer prevLogTerm, List<LogEntry> entries, Integer leaderCommit) {
         this.type = type;
         this.term = term;
-        this.leaderId = leaderId;
+        this.leaderHostname = leaderHostname;
+        this.leaderPort = leaderPort;
+        this.leaderId = new InetSocketAddress(this.leaderHostname, this.leaderPort);
         this.prevLogIndex = prevLogIndex;
         this.prevLogTerm = prevLogTerm;
         this.entries = entries;
@@ -132,13 +153,14 @@ public class RaftMessage {
     /**
      * Creates a RaftMessage to request votes from peer nodes during leader elections
      * @param term the sending node's current election term
-     * @param candidateId the node's location in the peer nodes arrayList of sockets
+     * @param candidateHostname the candidates Hostname
+     * @param candidatePort the candidates port
      * @param lastLogIndex the requesting node's last committed log entry
      * @param lastLogTerm the election term of the logs last entry
      * @return a RaftMessage that can be used for requesting votes from peer nodes
      */
-    public static RaftMessage voteRequest(int term, int candidateId, int lastLogIndex, int lastLogTerm) {
-        return new RaftMessage(MessageType.VOTE_REQUEST, term, candidateId, lastLogIndex, lastLogTerm);
+    public static RaftMessage voteRequest(int term, String candidateHostname, int candidatePort, int lastLogIndex, int lastLogTerm) {
+        return new RaftMessage(MessageType.VOTE_REQUEST, term, candidateHostname, candidatePort, lastLogIndex, lastLogTerm);
     }
 
     /**
@@ -154,7 +176,8 @@ public class RaftMessage {
     /**
      * Creates a RaftMessage requesting that peer nodes append the latest message to their logs
      * @param term the node's current election term
-     * @param leaderId the leader's index in the peer node's List of sockets
+     * @param leaderHostname The hostname of the leader node
+     * @param leaderPort The port the leader is listening on
      * @param prevLogIndex the last entry of the log that was added before the list of entries the leader node is
      *                     requesting be appended
      * @param prevLogTerm the term of the prevLogIndex entry
@@ -163,8 +186,8 @@ public class RaftMessage {
      * @return A RaftMessage that can will be sent to all peer nodes requesting that they add thee sent entries to their
      * log
      */
-    public static RaftMessage appendRequest(int term, int leaderId, int prevLogIndex, int prevLogTerm, List<LogEntry> entries, int leaderCommit) {
-        return new RaftMessage(MessageType.APPEND_REQUEST, term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit);
+    public static RaftMessage appendRequest(int term, String leaderHostname, int leaderPort, int prevLogIndex, int prevLogTerm, List<LogEntry> entries, int leaderCommit) {
+        return new RaftMessage(MessageType.APPEND_REQUEST, term, leaderHostname, leaderPort, prevLogIndex, prevLogTerm, entries, leaderCommit);
     }
 
     /**
@@ -188,7 +211,7 @@ public class RaftMessage {
     }
 
     public static RaftMessage hostnameList(List<String> hostnames) {
-        return new RaftMessage(MessageType.HOST_LIST, null, null, null, null, null, null, null, null, null, null, null, null, hostnames);
+        return new RaftMessage(MessageType.HOST_LIST,null , null,null, null, null, null, null, null, null, null, null, null, null, null, hostnames);
     }
 
     public static RaftMessage fromByteArray(byte[] bytes) throws IOException {
@@ -207,10 +230,11 @@ public class RaftMessage {
         switch (type) {
             case VOTE_REQUEST: {
                 int term = in.readInt();
-                int candidateId = in.readInt();
+                String candidateHostname = in.readUTF();
+                int candidatePort = in.readInt();
                 int lastLogIndex = in.readInt();
                 int lastLogTerm = in.readInt();
-                return RaftMessage.voteRequest(term, candidateId, lastLogIndex, lastLogTerm);
+                return RaftMessage.voteRequest(term, candidateHostname, candidatePort, lastLogIndex, lastLogTerm);
             }
             case VOTE_RESPONSE: {
                 int term = in.readInt();
@@ -219,7 +243,8 @@ public class RaftMessage {
             }
             case APPEND_REQUEST: {
                 int term = in.readInt();
-                int leaderId = in.readInt();
+                String leaderHostname = in.readUTF();
+                int leaderPort = in.readInt();
                 int prevLogIndex = in.readInt();
                 int prevLogTerm = in.readInt();
                 int size = in.readInt();
@@ -234,7 +259,7 @@ public class RaftMessage {
                 }
 
                 int leaderCommit = in.readInt();
-                return RaftMessage.appendRequest(term, leaderId, prevLogIndex, prevLogTerm, entries, leaderCommit);
+                return RaftMessage.appendRequest(term, leaderHostname, leaderPort, prevLogIndex, prevLogTerm, entries, leaderCommit);
             }
             case APPEND_RESPONSE: {
                 int term = in.readInt();
@@ -267,7 +292,8 @@ public class RaftMessage {
                 case VOTE_REQUEST: {
                     out.writeInt(type.ordinal());
                     out.writeInt(term);
-                    out.writeInt(candidateId);
+                    out.writeUTF(candidateHostname);
+                    out.writeInt(candidatePort);
                     out.writeInt(lastLogIndex);
                     out.writeInt(lastLogTerm);
                     break;
@@ -281,7 +307,8 @@ public class RaftMessage {
                 case APPEND_REQUEST: {
                     out.writeInt(type.ordinal());
                     out.writeInt(term);
-                    out.writeInt(leaderId);
+                    out.writeUTF(leaderHostname);
+                    out.writeInt(leaderPort);
                     out.writeInt(prevLogIndex);
                     out.writeInt(prevLogTerm);
                     out.writeInt(entries.size());

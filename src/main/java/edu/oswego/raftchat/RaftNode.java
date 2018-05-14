@@ -1,5 +1,6 @@
 package edu.oswego.raftchat;
 
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.lang.reflect.Array;
 import java.lang.reflect.Parameter;
@@ -20,6 +21,7 @@ public class RaftNode implements Runnable {
     private Set<Socket> clients = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private Set<Socket> peers = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private InetSocketAddress leaderId;
+    private int votesForCurrentTerm = 0;
 
     // leader state
     Map<InetSocketAddress, Integer> nextIndex = new ConcurrentHashMap<>();
@@ -96,6 +98,33 @@ public class RaftNode implements Runnable {
                 }).start();
             } catch (IOException e) {
                 e.printStackTrace();
+            }
+        }
+    }
+
+    public void appendEntries() {
+
+    }
+
+    public void requestVote(Socket socket) {
+        RaftMessage message = RaftMessage.voteRequest(currentTerm, socket.getInetAddress().getHostName(), socket.getPort(), lastApplied, log.get(lastApplied).getTerm());
+        try {
+            DataOutputStream out = new DataOutputStream(socket.getOutputStream());
+            out.write(message.toByteArray());
+        } catch(IOException e) {
+            System.out.println("IOException has occurred while requesting vote");
+        }
+    }
+
+    public void respondToRequestVote(RaftMessage message) {
+        boolean voteGranted = true;
+        RaftMessage response;
+        if(message.getType() == MessageType.VOTE_REQUEST) {
+            if(message.getTerm() <= currentTerm) {
+                voteGranted = false;
+            }
+            if(votedFor != null) {
+                voteGranted = false;
             }
         }
     }
