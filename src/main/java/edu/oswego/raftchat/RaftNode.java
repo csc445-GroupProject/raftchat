@@ -79,8 +79,12 @@ public class RaftNode implements Runnable {
      */
 
 
-    /*
+    /*Driver Methods
+    --------------------------------------------------------------------------------------------------------------------
+     */
 
+    /**
+     * This is the main driver method. This will execute anytime a RaftNode is set to execute on it's own thread.
      */
     @Override
     public void run() {
@@ -95,7 +99,7 @@ public class RaftNode implements Runnable {
             return;
         }
 
-        new Thread(this::handleNewCommits).start();
+        new Thread(this::handleNewCommits).start(); // A thread to specifically sort whether new incoming messages are network configuration entries or RaftMessages
 
         while (true) {
             switch (state.get()) {
@@ -281,6 +285,12 @@ public class RaftNode implements Runnable {
         }
     }
 
+    /**
+     * A method to take an incoming list of InetSocketAddresses and associate them with a socket,
+     * after each address is associated with a socket the newest configuration will be added to the log for transmission
+     * to the rest of the peer nodes, This will also serve as a means to initially give the network configuration to
+     * newly connecting nodes.
+     */
     private void handleNewCommits() {
         while(true) {
             while (commitIndex > lastApplied) {
@@ -310,6 +320,12 @@ public class RaftNode implements Runnable {
         }
     }
 
+    /**
+     * This method takes a map of peer nodes who are attempting to make a connection, creates a log entry that formalizes
+     * the new configuration and then with the next appendEntries request, all other peer nodes will receive the newest
+     * configuration
+     * @param newPeers a map containing all of the new nodes trying to make a connection.
+     */
     private void updatePeers(Map<InetSocketAddress, Socket> newPeers) {
         for(Socket peer : peers.values()) {
             try {
@@ -350,6 +366,11 @@ public class RaftNode implements Runnable {
         }
     }
 
+    /**
+     * This method listens for incoming messages from peer nodes. Once a message has been successfully received the
+     * message will be stored in a buffer to be pulled out at a convenient time. Once it is pulled out it will be
+     * handled according to what type of message it is
+     */
     private void listen() {
         while(true) {
             try (Socket newConnection = serverSocket.accept()) {
@@ -497,7 +518,7 @@ public class RaftNode implements Runnable {
     }
 
     /**
-     * deletes all log entries after a specified index, to account for unmatching logs.
+     * deletes all log entries after a specified index, to account for un-matching logs.
      * @param startingIndex
      */
     public void deleteLogEntries(int startingIndex) {
